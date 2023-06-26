@@ -1,115 +1,77 @@
 package ru.netology.test;
 
-import io.restassured.builder.RequestSpecBuilder;
-import io.restassured.filter.log.LogDetail;
 import io.restassured.http.ContentType;
-import io.restassured.path.json.JsonPath;
 import io.restassured.response.Response;
-import io.restassured.specification.RequestSpecification;
 import lombok.SneakyThrows;
-import org.apache.commons.dbutils.QueryRunner;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import ru.netology.data.ApiHelper;
 import ru.netology.data.Data;
 
-import java.sql.DriverManager;
+import java.util.List;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static ru.netology.data.Data.clearDB;
 
 public class TestApi {
 
     private static String token;
 
-    private static final RequestSpecification requestSpec = new RequestSpecBuilder()
-            .setBaseUri("http://localhost")
-            .setPort(9999)
-            .setAccept(ContentType.JSON)
-            .setContentType(ContentType.JSON)
-            .log(LogDetail.ALL)
-            .build();
-
     @BeforeAll
-    public static void getToken() {
-        given()
-                .spec(requestSpec)
-                .body(Data.getAuthInfo())
-                .post("/api/auth")
-                .then()
-                .statusCode(200);
-        Response response =
-                given()
-                        .spec(requestSpec)
-                        .body(Data.getVerificationCode(Data.getAuthInfo()))
-                        .post("/api/auth/verification")
-                        .then()
-                        .statusCode(200)
-                        .extract().response();
-        String jsonString = response.getBody().asString();
-        token = JsonPath.from(jsonString).get("token");
+    public static void set() {
+        token = ApiHelper.getTokenInfo();
     }
 
     @SneakyThrows
     @AfterAll
-    public static void clearDB() {
-        QueryRunner runner = new QueryRunner();
-        var con = DriverManager.getConnection("jdbc:mysql://localhost:3306/app", "app", "pass");
-        runner.update(con, "delete from auth_codes");
-        runner.update(con, "delete from card_transactions");
-        runner.update(con, "delete from cards");
-        runner.update(con, "delete from users");
+    public static void clear() {
+        clearDB();
     }
 
     @Test
-    public void getCardsTestV1() {
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body("")
-                .get("/api/cards")
-                .then()
-                .statusCode(200)
-                .contentType(ContentType.JSON);
+    public void getCardsTest() {
+        int statusCode = 200;
+        int size = 2;
+        ContentType contentType = ContentType.JSON;
+
+        Response response = ApiHelper.cardsRequest(token, statusCode, contentType, size);
+
+        List<Integer> balances = response.jsonPath().getList("balance");
+        int balance1 = balances.get(1);
+        int balance2 = balances.get(0);
+
+        assertTrue(balance1 > 0);
+        assertTrue(balance2 > 0);
     }
 
     @Test
-    public void getCardsTestV2() {
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body("")
-                .get("/api/cards")
-                .then()
-                .statusCode(200)
-                .body("", hasSize(2));
-    }
+    public void assertBalanceInBodyAnswerAndDB() {
+        int statusCode = 200;
+        int size = 2;
+        ContentType contentType = ContentType.JSON;
 
-    @Test
-    public void getCardsTestV3() {
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body("")
-                .get("/api/cards")
-                .then()
-                .statusCode(200)
-                .body("every{ it.balance >= 0 }", is(true));
+        Response response = ApiHelper.cardsRequest(token, statusCode, contentType, size);
+
+        List<Integer> balances = response.jsonPath().getList("balance");
+        int balance1 = balances.get(1);
+        int balance2 = balances.get(0);
+
+        assertEquals(balance1, Data.getCard1Balance().getBalance());
+        assertEquals(balance2, Data.getCard2Balance().getBalance());
     }
 
     @Test
     public void transferTestV1() {
         int amount = 5000;
+        int statusCode = 200;
+        var transferInfo = Data.getTransferInfo1(amount);
+        String path = "/api/transfer";
         int initBalance1 = Data.getCard1Balance().getBalance();
         int initBalance2 = Data.getCard2Balance().getBalance();
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body(Data.getTransferInfo1(amount))
-                .post("/api/transfer")
-                .then()
-                .statusCode(200);
+
+        ApiHelper.transferRequest(token, transferInfo, path, statusCode);
 
         assertEquals(initBalance1 - amount, Data.getCard1Balance().getBalance());
         assertEquals(initBalance2 + amount, Data.getCard2Balance().getBalance());
@@ -118,15 +80,13 @@ public class TestApi {
     @Test
     public void transferTestV2() {
         int amount = 5000;
+        int statusCode = 200;
+        var transferInfo = Data.getTransferInfo2(amount);
+        String path = "/api/transfer";
         int initBalance1 = Data.getCard1Balance().getBalance();
         int initBalance2 = Data.getCard2Balance().getBalance();
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body(Data.getTransferInfo2(amount))
-                .post("/api/transfer")
-                .then()
-                .statusCode(200);
+
+        ApiHelper.transferRequest(token, transferInfo, path, statusCode);
 
         assertEquals(initBalance1 + amount, Data.getCard1Balance().getBalance());
         assertEquals(initBalance2 - amount, Data.getCard2Balance().getBalance());
@@ -135,15 +95,13 @@ public class TestApi {
     @Test
     public void transferIfAmountIsZeroTest() {
         int amount = 0;
+        int statusCode = 400;
+        var transferInfo = Data.getTransferInfo1(amount);
+        String path = "/api/transfer";
         int initBalance1 = Data.getCard1Balance().getBalance();
         int initBalance2 = Data.getCard2Balance().getBalance();
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body(Data.getTransferInfo1(amount))
-                .post("/api/transfer")
-                .then()
-                .statusCode(400);
+
+        ApiHelper.transferRequest(token, transferInfo, path, statusCode);
 
         assertEquals(initBalance1, Data.getCard1Balance().getBalance());
         assertEquals(initBalance2, Data.getCard2Balance().getBalance());
@@ -152,15 +110,13 @@ public class TestApi {
     @Test
     public void transferIfAmountIsNegativeTest() {
         int amount = -1000;
+        int statusCode = 400;
+        var transferInfo = Data.getTransferInfo1(amount);
+        String path = "/api/transfer";
         int initBalance1 = Data.getCard1Balance().getBalance();
         int initBalance2 = Data.getCard2Balance().getBalance();
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body(Data.getTransferInfo1(amount))
-                .post("/api/transfer")
-                .then()
-                .statusCode(400);
+
+        ApiHelper.transferRequest(token, transferInfo, path, statusCode);
 
         assertEquals(initBalance1, Data.getCard1Balance().getBalance());
         assertEquals(initBalance2, Data.getCard2Balance().getBalance());
@@ -169,15 +125,13 @@ public class TestApi {
     @Test
     public void transferIfFromAndToEquals() {
         int amount = 5000;
+        int statusCode = 400;
+        var transferInfo = Data.getTransferInfo(amount);
+        String path = "/api/transfer";
         int initBalance1 = Data.getCard1Balance().getBalance();
         int initBalance2 = Data.getCard2Balance().getBalance();
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body(Data.getTransferInfo(amount))
-                .post("/api/transfer")
-                .then()
-                .statusCode(400);
+
+        ApiHelper.transferRequest(token, transferInfo, path, statusCode);
 
         assertEquals(initBalance1, Data.getCard1Balance().getBalance());
         assertEquals(initBalance2, Data.getCard2Balance().getBalance());
@@ -186,17 +140,28 @@ public class TestApi {
     @Test
     public void transferIfAmountMoreThanBalance() {
         int amount = 10001;
+        int statusCode = 400;
+        var transferInfo = Data.getTransferInfo1(amount);
+        String path = "/api/transfer";
         int initBalance1 = Data.getCard1Balance().getBalance();
         int initBalance2 = Data.getCard2Balance().getBalance();
-        given()
-                .spec(requestSpec)
-                .header("Authorization", "Bearer " + token)
-                .body(Data.getTransferInfo(amount))
-                .post("/api/transfer")
-                .then()
-                .statusCode(400);
+
+        ApiHelper.transferRequest(token, transferInfo, path, statusCode);
 
         assertEquals(initBalance1, Data.getCard1Balance().getBalance());
         assertEquals(initBalance2, Data.getCard2Balance().getBalance());
+    }
+
+    @Test
+    public void transferToRandomCard() {
+        int amount = 5000;
+        int statusCode = 400;
+        var transferInfo = Data.getRandomTransferInfo(amount);
+        String path = "/api/transfer";
+        int initBalance1 = Data.getCard1Balance().getBalance();
+
+        ApiHelper.transferRequest(token, transferInfo, path, statusCode);
+
+        assertEquals(initBalance1, Data.getCard1Balance().getBalance());
     }
 }

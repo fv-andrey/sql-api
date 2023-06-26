@@ -1,21 +1,25 @@
 package ru.netology.data;
 
+import com.github.javafaker.Faker;
 import lombok.SneakyThrows;
 import lombok.Value;
 import org.apache.commons.dbutils.QueryRunner;;
 import org.apache.commons.dbutils.handlers.ScalarHandler;
 
 import java.sql.DriverManager;
+import java.util.Locale;
 
 public class Data {
+
+    private static Faker faker = new Faker(new Locale("ru"));
 
     private Data() {
     }
 
     @Value
     public static class AuthInfo {
-        private String login;
-        private String password;
+        String login;
+        String password;
     }
 
     public static AuthInfo getAuthInfo() {
@@ -24,8 +28,8 @@ public class Data {
 
     @Value
     public static class VerificationCode {
-        private String code;
-        private String login;
+        String code;
+        String login;
     }
 
     @SneakyThrows
@@ -38,9 +42,9 @@ public class Data {
 
     @Value
     public static class TransferInfo {
-        private String from;
-        private String to;
-        private int amount;
+        String from;
+        String to;
+        int amount;
     }
 
     public static TransferInfo getTransferInfo(int amount) {
@@ -53,6 +57,10 @@ public class Data {
 
     public static TransferInfo getTransferInfo2(int amount) {
         return new TransferInfo("5559 0000 0000 0002", "5559 0000 0000 0001", amount);
+    }
+
+    public static TransferInfo getRandomTransferInfo(int amount) {
+        return new TransferInfo("5559 0000 0000 0001", faker.numerify("#### #### #### ####"), amount);
     }
 
     @Value
@@ -76,6 +84,16 @@ public class Data {
     public static CardBalance getCard2Balance() {
         var balance2 = getCardBalance("select balance_in_kopecks from cards where number = '5559 0000 0000 0002'");
         return new CardBalance(balance2);
+    }
+
+    @SneakyThrows
+    public static void clearDB() {
+        QueryRunner runner = new QueryRunner();
+        var con = DriverManager.getConnection("jdbc:mysql://localhost:3306/app", "app", "pass");
+        runner.update(con, "delete from auth_codes");
+        runner.update(con, "delete from card_transactions");
+        runner.update(con, "delete from cards");
+        runner.update(con, "delete from users");
     }
 }
 
